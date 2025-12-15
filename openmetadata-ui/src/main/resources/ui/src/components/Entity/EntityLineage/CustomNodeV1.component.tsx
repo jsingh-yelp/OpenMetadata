@@ -17,6 +17,7 @@ import { useLineageProvider } from '../../../context/LineageProvider/LineageProv
 import { EntityLineageNodeType } from '../../../enums/entity.enum';
 import { LineageDirection } from '../../../generated/api/lineage/lineageDirection';
 import { LineageLayer } from '../../../generated/configuration/lineageSettings';
+import { focusToCoordinates } from '../../../utils/EntityLineageUtils';
 import LineageNodeRemoveButton from '../../Lineage/LineageNodeRemoveButton';
 import './custom-node.less';
 import {
@@ -154,6 +155,10 @@ const CustomNodeV1 = (props: NodeProps) => {
     loadChildNodesHandler,
     activeLayer,
     dataQualityLineage,
+    nodes,
+    newlyLoadedNodeIds,
+    reactFlowInstance,
+    zoomValue,
   } = useLineageProvider();
 
   const {
@@ -214,6 +219,34 @@ const CustomNodeV1 = (props: NodeProps) => {
       isColumnLayerEnabled && !isEditMode
     );
   }, [isColumnLayerEnabled, isEditMode]);
+
+  useEffect(() => {
+    const newlyLoadedNodes = nodes.filter((node) =>
+      newlyLoadedNodeIds.includes(node.id)
+    );
+
+    if (newlyLoadedNodes.length === 0) {
+      return;
+    }
+
+    const centroid =
+      newlyLoadedNodes.length > 0
+        ? {
+            x:
+              newlyLoadedNodes.reduce(
+                (sum, node) => sum + (node.position?.x ?? 0),
+                0
+              ) / newlyLoadedNodes.length,
+            y:
+              newlyLoadedNodes.reduce(
+                (sum, node) => sum + (node.position?.y ?? 0),
+                0
+              ) / newlyLoadedNodes.length,
+          }
+        : { x: 0, y: 0 };
+
+    focusToCoordinates(centroid, reactFlowInstance, zoomValue);
+  }, [nodes, newlyLoadedNodeIds]);
 
   const containerClass = getNodeClassNames({
     isSelected,

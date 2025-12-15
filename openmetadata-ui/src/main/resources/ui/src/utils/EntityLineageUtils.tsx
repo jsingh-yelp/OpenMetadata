@@ -159,6 +159,17 @@ export const centerNodePosition = (
   );
 };
 
+export const focusToCoordinates = (
+  position: { x: number; y: number },
+  reactFlowInstance?: ReactFlowInstance,
+  zoomValue?: number
+) => {
+  reactFlowInstance?.setCenter(position.x, position.y + NODE_HEIGHT / 2, {
+    zoom: zoomValue ?? ZOOM_VALUE,
+    duration: ZOOM_TRANSITION_DURATION,
+  });
+};
+
 /* eslint-disable-next-line */
 export const onNodeMouseEnter = (_event: ReactMouseEvent, _node: Node) => {
   return;
