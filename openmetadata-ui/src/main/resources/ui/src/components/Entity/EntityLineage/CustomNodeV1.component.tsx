@@ -229,14 +229,16 @@ const CustomNodeV1 = (props: NodeProps) => {
       return;
     }
 
-    const centroid =
+    /**
+     * When a node expands one level, new nodes load at the same vertical position—they share
+     * the same x-coordinate but have different y-coordinates. We focus on the x-coordinate of
+     * the first newly loaded node, since all have same x-coordinate. For the y-coordinate, we
+     * focus on the midpoint of all y-coordinates. It’s similar to finding a centroid of multiple coordinates.
+     */
+    const newPositionToFocus =
       newlyLoadedNodes.length > 0
         ? {
-            x:
-              newlyLoadedNodes.reduce(
-                (sum, node) => sum + (node.position?.x ?? 0),
-                0
-              ) / newlyLoadedNodes.length,
+            x: newlyLoadedNodes[0].position.x,
             y:
               newlyLoadedNodes.reduce(
                 (sum, node) => sum + (node.position?.y ?? 0),
@@ -245,7 +247,7 @@ const CustomNodeV1 = (props: NodeProps) => {
           }
         : { x: 0, y: 0 };
 
-    focusToCoordinates(centroid, reactFlowInstance, zoomValue);
+    focusToCoordinates(newPositionToFocus, reactFlowInstance, zoomValue);
   }, [nodes, newlyLoadedNodeIds]);
 
   const containerClass = getNodeClassNames({
@@ -266,6 +268,11 @@ const CustomNodeV1 = (props: NodeProps) => {
   const onCollapse = useCallback(
     (direction = LineageDirection.Downstream) => {
       onNodeCollapse(props, direction);
+      focusToCoordinates(
+        { x: props.xPos, y: props.yPos },
+        reactFlowInstance,
+        zoomValue
+      );
     },
     [onNodeCollapse, props]
   );
