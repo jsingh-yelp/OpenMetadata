@@ -251,7 +251,7 @@ const CustomNodeV1 = (props: NodeProps) => {
 
     focusToCoordinates(newPositionToFocus, reactFlowInstance, zoomValue);
     setIsNodeExpanded(false);
-  }, [nodes, newlyLoadedNodeIds, isNodeExpanded]);
+  }, [nodes, newlyLoadedNodeIds, isNodeExpanded, reactFlowInstance, zoomValue]);
 
   const containerClass = getNodeClassNames({
     isSelected,
@@ -279,7 +279,7 @@ const CustomNodeV1 = (props: NodeProps) => {
         zoomValue
       );
     },
-    [onNodeCollapse, props]
+    [onNodeCollapse, props, reactFlowInstance, zoomValue]
   );
 
   const nodeLabel = useMemo(() => {
@@ -306,19 +306,18 @@ const CustomNodeV1 = (props: NodeProps) => {
       </>
     );
   }, [
-    node.id,
     isNewNode,
     label,
+    isChildrenListExpanded,
+    isOnlyShowColumnsWithLineageFilterActive,
+    node,
+    toggleColumnsList,
+    toggleOnlyShowColumnsWithLineageFilterActive,
     isSelected,
     isEditMode,
     isRootNode,
-    isChildrenListExpanded,
-    toggleColumnsList,
-    toggleOnlyShowColumnsWithLineageFilterActive,
     removeNodeHandler,
     props,
-    isOnlyShowColumnsWithLineageFilterActive,
-    isEditMode,
   ]);
 
   const expandCollapseProps = useMemo<ExpandCollapseHandlesProps>(
