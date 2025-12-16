@@ -208,7 +208,7 @@ final class GChatCardAssembler extends AbstractVisitor {
       }
     }
 
-    String tableHtml = formatTableAsHtml(headers, bodyRows, colCount);
+    String tableHtml = formatTableAsHtml(headers, bodyRows, colCount, 0);
     if (!tableHtml.isEmpty()) {
       currentWidgets.add(GChatMessageV2.Widget.text(tableHtml));
     }
@@ -216,23 +216,32 @@ final class GChatCardAssembler extends AbstractVisitor {
     flushCurrentSection();
   }
 
-  private String formatTableAsHtml(List<String> headers, List<List<String>> rows, int colCount) {
+  private String formatTableAsHtml(List<String> headers, List<List<String>> rows, int colCount,
+      int indentLevel) {
     StringBuilder html = new StringBuilder();
     int recordNum = 1;
 
-    for (List<String> row : rows) {
-      // Record header
-      html.append("<b>• Record ").append(recordNum).append("</b><br>");
+    // For nested tables (inside lists), prepend a line break to separate from list label
+    if (indentLevel > 0) {
+      html.append("<br>");
+    }
 
-      // Key-value pairs with indentation
+    // Determine formatting based on indent level
+    String bulletChar = indentLevel > 0 ? "▸" : "•";
+    String recordHeaderIndent = indentLevel > 0 ? "&nbsp;&nbsp;&nbsp;" : "";
+    String keyIndent = "&nbsp;".repeat(3 * (indentLevel + 1));
+
+    for (List<String> row : rows) {
+      // Record header with appropriate indentation and bullet style
+      html.append(recordHeaderIndent).append("<b>").append(bulletChar).append(" Record ")
+          .append(recordNum).append("</b><br>");
+
+      // Key-value pairs with indentation based on nesting level
       for (int i = 0; i < colCount; i++) {
         String key = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
         String value = i < row.size() ? row.get(i) : "";
-        html.append("&nbsp;&nbsp;&nbsp;<b>")
-            .append(escapeHtml(key))
-            .append(":</b> ")
-            .append(escapeHtml(value))
-            .append("<br>");
+        html.append(keyIndent).append("<b>").append(escapeHtml(key)).append(":</b> ")
+            .append(escapeHtml(value)).append("<br>");
       }
 
       // Extra line break between records
@@ -358,38 +367,7 @@ final class GChatCardAssembler extends AbstractVisitor {
     }
 
     // Use nested format with extra indentation when inside a list
-    return formatTableAsNestedHtml(headers, bodyRows, colCount);
-  }
-
-  private String formatTableAsNestedHtml(
-      List<String> headers, List<List<String>> rows, int colCount) {
-    StringBuilder html = new StringBuilder();
-    int recordNum = 1;
-
-    // Start with line break to separate from list item label
-    html.append("<br>");
-
-    for (List<String> row : rows) {
-      // Record header with nested bullet style and extra indentation
-      html.append("&nbsp;&nbsp;&nbsp;<b>▸ Record ").append(recordNum).append("</b><br>");
-
-      // Key-value pairs with double indentation (nested inside list + inside record)
-      for (int i = 0; i < colCount; i++) {
-        String key = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
-        String value = i < row.size() ? row.get(i) : "";
-        html.append("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>")
-            .append(escapeHtml(key))
-            .append(":</b> ")
-            .append(escapeHtml(value))
-            .append("<br>");
-      }
-
-      // Extra line break between records
-      html.append("<br>");
-      recordNum++;
-    }
-
-    return html.toString();
+    return formatTableAsHtml(headers, bodyRows, colCount, 1);
   }
 
   private void appendList(StringBuilder sb, Node list, int indent, Integer start) {
