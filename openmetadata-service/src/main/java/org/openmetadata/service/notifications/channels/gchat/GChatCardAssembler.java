@@ -216,37 +216,46 @@ final class GChatCardAssembler extends AbstractVisitor {
     flushCurrentSection();
   }
 
-  private String formatTableAsHtml(List<String> headers, List<List<String>> rows, int colCount,
-      int indentLevel) {
+  private String formatTableAsHtml(
+      List<String> headers, List<List<String>> rows, int colCount, int indentLevel) {
     StringBuilder html = new StringBuilder();
-    int recordNum = 1;
 
-    // For nested tables (inside lists), prepend a line break to separate from list label
     if (indentLevel > 0) {
       html.append("<br>");
     }
 
-    // Determine formatting based on indent level
-    String bulletChar = indentLevel > 0 ? "▸" : "•";
-    String recordHeaderIndent = indentLevel > 0 ? "&nbsp;&nbsp;&nbsp;" : "";
-    String keyIndent = "&nbsp;".repeat(3 * (indentLevel + 1));
+    // Create a table-like structure for better readability
+    for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
+      List<String> row = rows.get(rowIdx);
 
-    for (List<String> row : rows) {
-      // Record header with appropriate indentation and bullet style
-      html.append(recordHeaderIndent).append("<b>").append(bulletChar).append(" Record ")
-          .append(recordNum).append("</b><br>");
+      // Record header with visual separator
+      html.append("<b>📋 Record ").append(rowIdx + 1).append("</b><br>");
+      html.append("─".repeat(40)).append("<br>");
 
-      // Key-value pairs with indentation based on nesting level
+      // Calculate max key length for alignment
+      int maxKeyLength = headers.stream().mapToInt(String::length).max().orElse(0);
+
+      // Key-value pairs with fixed-width columns for alignment
       for (int i = 0; i < colCount; i++) {
         String key = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
-        String value = i < row.size() ? row.get(i) : "";
-        html.append(keyIndent).append("<b>").append(escapeHtml(key)).append(":</b> ")
-            .append(escapeHtml(value)).append("<br>");
+        String value = i < row.size() && row.get(i) != null ? row.get(i) : "";
+
+        // Truncate long values
+        if (value.length() > 60) {
+          value = value.substring(0, 57) + "…";
+        }
+
+        // Format with monospace for alignment
+        html.append("<code>")
+            .append(
+                String.format("%-" + maxKeyLength + "s : %s", escapeHtml(key), escapeHtml(value)))
+            .append("</code><br>");
       }
 
-      // Extra line break between records
-      html.append("<br>");
-      recordNum++;
+      // Separator between records
+      if (rowIdx < rows.size() - 1) {
+        html.append("<br>");
+      }
     }
 
     return html.toString();
