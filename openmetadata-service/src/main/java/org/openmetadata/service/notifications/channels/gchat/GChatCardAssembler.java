@@ -357,7 +357,39 @@ final class GChatCardAssembler extends AbstractVisitor {
       }
     }
 
-    return formatTableAsHtml(headers, bodyRows, colCount);
+    // Use nested format with extra indentation when inside a list
+    return formatTableAsNestedHtml(headers, bodyRows, colCount);
+  }
+
+  private String formatTableAsNestedHtml(
+      List<String> headers, List<List<String>> rows, int colCount) {
+    StringBuilder html = new StringBuilder();
+    int recordNum = 1;
+
+    // Start with line break to separate from list item label
+    html.append("<br>");
+
+    for (List<String> row : rows) {
+      // Record header with nested bullet style and extra indentation
+      html.append("&nbsp;&nbsp;&nbsp;<b>▸ Record ").append(recordNum).append("</b><br>");
+
+      // Key-value pairs with double indentation (nested inside list + inside record)
+      for (int i = 0; i < colCount; i++) {
+        String key = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
+        String value = i < row.size() ? row.get(i) : "";
+        html.append("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>")
+            .append(escapeHtml(key))
+            .append(":</b> ")
+            .append(escapeHtml(value))
+            .append("<br>");
+      }
+
+      // Extra line break between records
+      html.append("<br>");
+      recordNum++;
+    }
+
+    return html.toString();
   }
 
   private void appendList(StringBuilder sb, Node list, int indent, Integer start) {
