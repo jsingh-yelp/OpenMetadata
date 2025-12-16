@@ -208,29 +208,39 @@ final class GChatCardAssembler extends AbstractVisitor {
       }
     }
 
-    int rowNum = 0;
-    for (List<String> row : bodyRows) {
-      if (rowNum > 0) {
-        currentWidgets.add(GChatMessageV2.Widget.divider());
-      }
-
-      StringBuilder rowLabel = new StringBuilder();
-      rowLabel.append("Row ").append(rowNum + 1);
-
-      StringBuilder rowText = new StringBuilder();
-      for (int i = 0; i < colCount; i++) {
-        String header = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
-        String value = i < row.size() ? row.get(i) : "";
-        if (i > 0) rowText.append("\n");
-        rowText.append("*").append(escapeHtml(header)).append("*: ").append(escapeHtml(value));
-      }
-
-      currentWidgets.add(
-          GChatMessageV2.Widget.decoratedText(rowLabel.toString(), rowText.toString()));
-      rowNum++;
+    String tableHtml = formatTableAsHtml(headers, bodyRows, colCount);
+    if (!tableHtml.isEmpty()) {
+      currentWidgets.add(GChatMessageV2.Widget.text(tableHtml));
     }
 
     flushCurrentSection();
+  }
+
+  private String formatTableAsHtml(List<String> headers, List<List<String>> rows, int colCount) {
+    StringBuilder html = new StringBuilder();
+    int recordNum = 1;
+
+    for (List<String> row : rows) {
+      // Record header
+      html.append("<b>• Record ").append(recordNum).append("</b><br>");
+
+      // Key-value pairs with indentation
+      for (int i = 0; i < colCount; i++) {
+        String key = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
+        String value = i < row.size() ? row.get(i) : "";
+        html.append("&nbsp;&nbsp;&nbsp;<b>")
+            .append(escapeHtml(key))
+            .append(":</b> ")
+            .append(escapeHtml(value))
+            .append("<br>");
+      }
+
+      // Extra line break between records
+      html.append("<br>");
+      recordNum++;
+    }
+
+    return html.toString();
   }
 
   private List<String> extractTableRowCells(TableRow row) {
@@ -286,6 +296,8 @@ final class GChatCardAssembler extends AbstractVisitor {
         part = formatCodeBlock(code);
       } else if (c instanceof BlockQuote) {
         part = formatBlockQuoteForList((BlockQuote) c);
+      } else if (c instanceof TableBlock) {
+        part = formatTableForList((TableBlock) c);
       } else {
         GChatCardAssembler tempVisitor = new GChatCardAssembler();
         part = tempVisitor.inline.renderInlineChildren(c).trim();
@@ -297,7 +309,8 @@ final class GChatCardAssembler extends AbstractVisitor {
         if (c instanceof Paragraph
             || c instanceof FencedCodeBlock
             || c instanceof IndentedCodeBlock
-            || c instanceof BlockQuote) {
+            || c instanceof BlockQuote
+            || c instanceof TableBlock) {
           sb.append("\n");
         } else {
           sb.append(" ");
@@ -307,6 +320,44 @@ final class GChatCardAssembler extends AbstractVisitor {
       first = false;
     }
     return sb.toString();
+  }
+
+  private String formatTableForList(TableBlock table) {
+    List<String> headers = new ArrayList<>();
+    List<List<String>> bodyRows = new ArrayList<>();
+
+    for (Node child = table.getFirstChild(); child != null; child = child.getNext()) {
+      if (child instanceof TableHead) {
+        for (Node row = child.getFirstChild(); row != null; row = row.getNext()) {
+          if (row instanceof TableRow) {
+            headers = extractTableRowCells((TableRow) row);
+            break;
+          }
+        }
+      } else if (child instanceof TableBody) {
+        for (Node row = child.getFirstChild(); row != null; row = row.getNext()) {
+          if (row instanceof TableRow) {
+            bodyRows.add(extractTableRowCells((TableRow) row));
+          }
+        }
+      }
+    }
+
+    if (headers.isEmpty() && bodyRows.isEmpty()) return "";
+
+    int colCount = headers.size();
+    for (List<String> row : bodyRows) colCount = Math.max(colCount, row.size());
+
+    if (colCount == 0) return "";
+
+    if (headers.isEmpty()) {
+      headers = new ArrayList<>();
+      for (int i = 0; i < colCount; i++) {
+        headers.add("Column " + (i + 1));
+      }
+    }
+
+    return formatTableAsHtml(headers, bodyRows, colCount);
   }
 
   private void appendList(StringBuilder sb, Node list, int indent, Integer start) {
