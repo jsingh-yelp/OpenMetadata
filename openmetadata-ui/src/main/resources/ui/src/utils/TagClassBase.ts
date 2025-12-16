@@ -264,7 +264,6 @@ class TagClassBase {
 
   public getRecognizerFeedbackPopup(
     _tagLabel: TagLabel,
-    _entityType: string,
     _entityFqn: string,
     _children: React.ReactElement
   ): React.ReactElement | null {
