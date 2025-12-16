@@ -206,6 +206,8 @@ const CustomNodeV1 = (props: NodeProps) => {
     setIsOnlyShowColumnsWithLineageFilterActive,
   ] = useState(false);
 
+  const [isNodeExpanded, setIsNodeExpanded] = useState(false);
+
   const toggleOnlyShowColumnsWithLineageFilterActive = useCallback(() => {
     setIsOnlyShowColumnsWithLineageFilterActive((prev) => !prev);
   }, []);
@@ -225,7 +227,7 @@ const CustomNodeV1 = (props: NodeProps) => {
       newlyLoadedNodeIds.includes(node.id)
     );
 
-    if (newlyLoadedNodes.length === 0) {
+    if (!isNodeExpanded || newlyLoadedNodes.length === 0) {
       return;
     }
 
@@ -233,7 +235,7 @@ const CustomNodeV1 = (props: NodeProps) => {
      * When a node expands one level, new nodes load at the same vertical position—they share
      * the same x-coordinate but have different y-coordinates. We focus on the x-coordinate of
      * the first newly loaded node, since all have same x-coordinate. For the y-coordinate, we
-     * focus on the midpoint of all y-coordinates. It’s similar to finding a centroid of multiple coordinates.
+     * focus on the midpoint of all y-coordinates. It's similar to finding a centroid of multiple coordinates.
      */
     const newPositionToFocus =
       newlyLoadedNodes.length > 0
@@ -248,7 +250,8 @@ const CustomNodeV1 = (props: NodeProps) => {
         : { x: 0, y: 0 };
 
     focusToCoordinates(newPositionToFocus, reactFlowInstance, zoomValue);
-  }, [nodes, newlyLoadedNodeIds]);
+    setIsNodeExpanded(false);
+  }, [nodes, newlyLoadedNodeIds, isNodeExpanded]);
 
   const containerClass = getNodeClassNames({
     isSelected,
@@ -260,7 +263,9 @@ const CustomNodeV1 = (props: NodeProps) => {
 
   const onExpand = useCallback(
     (direction: LineageDirection, depth = 1) => {
-      loadChildNodesHandler(node, direction, depth);
+      loadChildNodesHandler(node, direction, depth).then(() => {
+        setIsNodeExpanded(true);
+      });
     },
     [loadChildNodesHandler, node]
   );
