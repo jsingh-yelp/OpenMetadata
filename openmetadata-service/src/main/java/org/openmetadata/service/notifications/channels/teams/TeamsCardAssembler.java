@@ -195,12 +195,7 @@ final class TeamsCardAssembler extends AbstractVisitor {
   public void visit(BulletList bulletList) {
     flushCurrentText();
     inList = true;
-    StringBuilder listText = new StringBuilder();
-    appendList(listText, bulletList, 0, null);
-    String out = listText.toString().trim();
-    if (!out.isEmpty()) {
-      body.add(createTextBlock(out, null, 0, false));
-    }
+    appendListWithTables(bulletList, 0, null);
     inList = false;
   }
 
@@ -208,12 +203,7 @@ final class TeamsCardAssembler extends AbstractVisitor {
   public void visit(OrderedList orderedList) {
     flushCurrentText();
     inList = true;
-    StringBuilder listText = new StringBuilder();
-    appendList(listText, orderedList, 0, orderedList.getMarkerStartNumber());
-    String out = listText.toString().trim();
-    if (!out.isEmpty()) {
-      body.add(createTextBlock(out, null, 0, false));
-    }
+    appendListWithTables(orderedList, 0, orderedList.getMarkerStartNumber());
     inList = false;
   }
 
@@ -620,6 +610,173 @@ final class TeamsCardAssembler extends AbstractVisitor {
     }
 
     return quotedContent.toString().trim();
+  }
+
+  private void appendListWithTables(Node list, int indent, Integer start) {
+    StringBuilder listText = new StringBuilder();
+    int index = (start == null) ? 1 : Math.max(1, start);
+
+    for (Node liNode = list.getFirstChild(); liNode != null; liNode = liNode.getNext()) {
+      if (!(liNode instanceof ListItem li)) continue;
+
+      // Check if this list item contains a table
+      TableBlock tableInItem = findTableInListItem(li);
+
+      if (tableInItem != null) {
+        // Render text content before the table
+        String textPart = renderListItemTextOnly(li);
+        String pad = "  ".repeat(indent);
+
+        if (!textPart.isEmpty()) {
+          if (start == null) {
+            listText.append(pad).append("- ").append(textPart).append("\n");
+          } else {
+            listText.append(pad).append(index).append(". ").append(textPart).append("\n");
+          }
+        }
+
+        // Flush accumulated list text before rendering table
+        String out = listText.toString().trim();
+        if (!out.isEmpty()) {
+          body.add(createTextBlock(out, null, 0, false));
+          listText.setLength(0);
+        }
+
+        // Render the table as native Table element
+        renderTableBlock(tableInItem);
+      } else {
+        // No table - render normally
+        String row = renderListItemInlineOnly(li);
+        String pad = "  ".repeat(indent);
+
+        if (start == null) {
+          if (!row.isEmpty()) listText.append(pad).append("- ").append(row).append("\n");
+        } else {
+          if (!row.isEmpty())
+            listText.append(pad).append(index).append(". ").append(row).append("\n");
+        }
+      }
+
+      if (start != null) index++;
+
+      // Handle nested lists
+      for (Node c = li.getFirstChild(); c != null; c = c.getNext()) {
+        if (c instanceof BulletList || c instanceof OrderedList) {
+          // Flush current list text before nested list
+          String out = listText.toString().trim();
+          if (!out.isEmpty()) {
+            body.add(createTextBlock(out, null, 0, false));
+            listText.setLength(0);
+          }
+
+          if (c instanceof BulletList) {
+            appendListWithTables(c, indent + 1, null);
+          } else {
+            appendListWithTables(c, indent + 1, ((OrderedList) c).getMarkerStartNumber());
+          }
+        }
+      }
+    }
+
+    // Flush any remaining list text
+    String out = listText.toString().trim();
+    if (!out.isEmpty()) {
+      body.add(createTextBlock(out, null, 0, false));
+    }
+  }
+
+  private TableBlock findTableInListItem(ListItem li) {
+    for (Node c = li.getFirstChild(); c != null; c = c.getNext()) {
+      if (c instanceof TableBlock) {
+        return (TableBlock) c;
+      }
+    }
+    return null;
+  }
+
+  private String renderListItemTextOnly(ListItem li) {
+    StringBuilder sb = new StringBuilder();
+    boolean first = true;
+    for (Node c = li.getFirstChild(); c != null; c = c.getNext()) {
+      // Skip tables, nested lists
+      if (c instanceof TableBlock || c instanceof BulletList || c instanceof OrderedList) continue;
+
+      String part;
+      if (c instanceof FencedCodeBlock) {
+        String code = ((FencedCodeBlock) c).getLiteral();
+        part = formatCodeForList(code);
+      } else if (c instanceof IndentedCodeBlock) {
+        String code = ((IndentedCodeBlock) c).getLiteral();
+        part = formatCodeForList(code);
+      } else if (c instanceof BlockQuote) {
+        part = formatBlockQuoteForList((BlockQuote) c);
+      } else {
+        TeamsCardAssembler tempVisitor = new TeamsCardAssembler();
+        part = tempVisitor.inline.renderInlineChildren(c).trim();
+      }
+
+      if (part.isEmpty()) continue;
+
+      if (!first) {
+        sb.append(" ");
+      }
+      sb.append(part);
+      first = false;
+    }
+    return sb.toString();
+  }
+
+  private void renderTableBlock(TableBlock table) {
+    List<String> headers = new ArrayList<>();
+    List<List<String>> bodyRows = new ArrayList<>();
+
+    for (Node child = table.getFirstChild(); child != null; child = child.getNext()) {
+      if (child instanceof TableHead) {
+        for (Node row = child.getFirstChild(); row != null; row = row.getNext()) {
+          if (row instanceof TableRow) {
+            headers = extractTableRowCells((TableRow) row);
+            break;
+          }
+        }
+      } else if (child instanceof TableBody) {
+        for (Node row = child.getFirstChild(); row != null; row = row.getNext()) {
+          if (row instanceof TableRow) {
+            bodyRows.add(extractTableRowCells((TableRow) row));
+          }
+        }
+      }
+    }
+
+    if (headers.isEmpty() && bodyRows.isEmpty()) return;
+
+    int colCount = headers.size();
+    for (List<String> row : bodyRows) colCount = Math.max(colCount, row.size());
+
+    if (colCount == 0) return;
+
+    if (headers.isEmpty()) {
+      headers = new ArrayList<>();
+      for (int i = 0; i < colCount; i++) {
+        headers.add("Column " + (i + 1));
+      }
+    }
+
+    // Add summary header
+    int totalRecords = bodyRows.size();
+    String summary = String.format("📋 %d record%s", totalRecords, totalRecords == 1 ? "" : "s");
+
+    body.add(
+        TeamsMessage.TextBlock.builder()
+            .type("TextBlock")
+            .text(summary)
+            .wrap(true)
+            .weight("Bolder")
+            .build());
+
+    // Add each record as a transposed table
+    for (int i = 0; i < bodyRows.size(); i++) {
+      body.add(buildRecordTable(headers, bodyRows.get(i), i + 1, i > 0));
+    }
   }
 
   private void appendList(StringBuilder out, Node list, int indent, Integer start) {
