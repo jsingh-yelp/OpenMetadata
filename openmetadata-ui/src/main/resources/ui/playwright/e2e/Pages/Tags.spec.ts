@@ -250,11 +250,8 @@ test('Classification Page', async ({ page }) => {
     await redirectToHomePage(page);
     await classification.visitPage(page);
     await page.click('[data-testid="add-classification"]');
-    await page.waitForSelector('.tags-form', {
-      state: 'visible',
-    });
 
-    await expect(page.locator('.tags-form')).toBeVisible();
+    await expect(page.getByRole('form', { name: 'tags' })).toBeVisible();
 
     await validateForm(page);
 
@@ -289,23 +286,14 @@ test('Classification Page', async ({ page }) => {
 
     await page.click('[data-testid="add-new-tag-button"]');
 
-    await page.waitForSelector('.tags-form', {
-      state: 'visible',
-    });
-
-    await expect(page.locator('.tags-form')).toBeVisible();
+    await expect(page.getByRole('form', { name: 'tags' })).toBeVisible();
 
     await validateForm(page);
 
     await page.fill('[data-testid="name"]', NEW_TAG.name);
     await page.fill('[data-testid="displayName"]', NEW_TAG.displayName);
     await page.locator(descriptionBox).fill(NEW_TAG.description);
-    await page
-      .getByRole('group')
-      .filter({ hasText: 'Icon' })
-      .locator('div')
-      .nth(1)
-      .click();
+    await page.getByTestId('icon-picker-btn').click();
     await page
       .getByRole('button', { name: `Select icon ${NEW_TAG.icon}` })
       .click();
