@@ -322,36 +322,91 @@ final class TeamsCardAssembler extends AbstractVisitor {
       }
     }
 
-    int rowNum = 0;
-    for (List<String> row : bodyRows) {
-      if (rowNum > 0) {
-        body.add(
-            TeamsMessage.TextBlock.builder()
-                .type("TextBlock")
-                .text("")
-                .wrap(false)
-                .separator(true)
-                .build());
-      }
-
+    String tableText = formatTableAsText(headers, bodyRows, colCount, false);
+    if (!tableText.isEmpty()) {
       body.add(
           TeamsMessage.TextBlock.builder()
               .type("TextBlock")
-              .text("**Row " + (rowNum + 1) + "**")
+              .text(tableText)
               .wrap(true)
-              .weight("Bolder")
+              .fontType("Monospace")
               .build());
+    }
+  }
 
-      List<TeamsMessage.Fact> facts = new ArrayList<>();
+  private String formatTableAsText(
+      List<String> headers, List<List<String>> rows, int colCount, boolean nested) {
+    StringBuilder text = new StringBuilder();
+
+    // Calculate max key length for alignment
+    int maxKeyLength = headers.stream().mapToInt(String::length).max().orElse(0);
+
+    for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
+      List<String> row = rows.get(rowIdx);
+
+      // Record header with visual separator
+      // Use double newlines for proper line breaks in Teams Adaptive Cards
+      text.append("📋 **Record ").append(rowIdx + 1).append("**\n\n");
+      text.append("─".repeat(Math.min(40, maxKeyLength + 20))).append("\n\n");
+
+      // Key-value pairs
       for (int i = 0; i < colCount; i++) {
-        String header = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
-        String value = i < row.size() ? row.get(i) : "";
-        facts.add(TeamsMessage.Fact.builder().title(header).value(value).build());
+        String key = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
+        String value = i < row.size() && row.get(i) != null ? row.get(i) : "";
+
+        // Truncate long values
+        if (value.length() > 60) {
+          value = value.substring(0, 57) + "…";
+        }
+
+        text.append(String.format("%-" + maxKeyLength + "s : %s", key, value)).append("\n\n");
       }
 
-      body.add(TeamsMessage.FactSet.builder().type("FactSet").facts(facts).build());
-      rowNum++;
+      // Separator between records
+      if (rowIdx < rows.size() - 1) {
+        text.append("\n");
+      }
     }
+
+    return text.toString();
+  }
+
+  private String formatTableForList(TableBlock table) {
+    List<String> headers = new ArrayList<>();
+    List<List<String>> bodyRows = new ArrayList<>();
+
+    for (Node child = table.getFirstChild(); child != null; child = child.getNext()) {
+      if (child instanceof TableHead) {
+        for (Node row = child.getFirstChild(); row != null; row = row.getNext()) {
+          if (row instanceof TableRow) {
+            headers = extractTableRowCells((TableRow) row);
+            break;
+          }
+        }
+      } else if (child instanceof TableBody) {
+        for (Node row = child.getFirstChild(); row != null; row = row.getNext()) {
+          if (row instanceof TableRow) {
+            bodyRows.add(extractTableRowCells((TableRow) row));
+          }
+        }
+      }
+    }
+
+    if (headers.isEmpty() && bodyRows.isEmpty()) return "";
+
+    int colCount = headers.size();
+    for (List<String> row : bodyRows) colCount = Math.max(colCount, row.size());
+
+    if (colCount == 0) return "";
+
+    if (headers.isEmpty()) {
+      headers = new ArrayList<>();
+      for (int i = 0; i < colCount; i++) {
+        headers.add("Column " + (i + 1));
+      }
+    }
+
+    return formatTableAsText(headers, bodyRows, colCount, true);
   }
 
   private List<String> extractTableRowCells(TableRow row) {
@@ -423,6 +478,8 @@ final class TeamsCardAssembler extends AbstractVisitor {
         part = formatCodeForList(code);
       } else if (c instanceof BlockQuote) {
         part = formatBlockQuoteForList((BlockQuote) c);
+      } else if (c instanceof TableBlock) {
+        part = formatTableForList((TableBlock) c);
       } else {
         TeamsCardAssembler tempVisitor = new TeamsCardAssembler();
         part = tempVisitor.inline.renderInlineChildren(c).trim();
@@ -434,7 +491,8 @@ final class TeamsCardAssembler extends AbstractVisitor {
         if (c instanceof Paragraph
             || c instanceof FencedCodeBlock
             || c instanceof IndentedCodeBlock
-            || c instanceof BlockQuote) {
+            || c instanceof BlockQuote
+            || c instanceof TableBlock) {
           sb.append("\n");
         } else {
           sb.append(" ");
