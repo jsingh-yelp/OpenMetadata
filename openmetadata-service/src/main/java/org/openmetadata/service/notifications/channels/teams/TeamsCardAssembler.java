@@ -247,25 +247,34 @@ final class TeamsCardAssembler extends AbstractVisitor {
     TableData data = extractTableData(tableBlock);
     if (data.isEmpty()) return;
 
+    List<TeamsMessage.BodyItem> containerItems = new ArrayList<>();
     int totalRecords = data.rows.size();
 
     if (totalRecords > 1) {
-      body.add(
+      containerItems.add(
           TeamsMessage.TextBlock.builder()
               .type("TextBlock")
               .text(String.format("📋 %d records", totalRecords))
               .weight("Bolder")
-              .spacing("Medium")
+              .size("Small")
               .wrap(true)
               .build());
     }
 
     for (int i = 0; i < totalRecords; i++) {
       boolean showHeader = totalRecords > 1;
-      boolean addSpacing = i > 0 || !showHeader;
-      body.add(
+      boolean addSpacing = i > 0;
+      containerItems.add(
           buildTransposedRecord(data.headers, data.rows.get(i), i + 1, showHeader, addSpacing));
     }
+
+    // Wrap the entire table section in a grey "emphasis" container
+    body.add(
+        TeamsMessage.Container.builder()
+            .type("Container")
+            .style("emphasis")
+            .items(containerItems)
+            .build());
   }
 
   private void addCodeBlock(String literal) {
@@ -331,8 +340,14 @@ final class TeamsCardAssembler extends AbstractVisitor {
 
   private TeamsMessage.TableCell createCell(String text, boolean bold) {
     TeamsMessage.TextBlock.TextBlockBuilder txt =
-        TeamsMessage.TextBlock.builder().type("TextBlock").text(text).wrap(true);
+        TeamsMessage.TextBlock.builder()
+            .type("TextBlock")
+            .text(text)
+            .wrap(true)
+            .size("Small"); // Compact size for table data
+
     if (bold) txt.weight("Bolder");
+
     return TeamsMessage.TableCell.builder().type("TableCell").items(List.of(txt.build())).build();
   }
 
@@ -377,7 +392,6 @@ final class TeamsCardAssembler extends AbstractVisitor {
     if (currentText.isEmpty()) return;
     String text = currentText.toString().trim();
     if (!text.isEmpty()) {
-      // Split clean lines and add them as individual blocks
       text.lines()
           .map(String::trim)
           .filter(s -> !s.isEmpty())
@@ -467,8 +481,8 @@ final class TeamsCardAssembler extends AbstractVisitor {
   /** Helper to manage list item text buffer and bullet rendering state. */
   private class ListItemBuffer {
     private final StringBuilder buffer = new StringBuilder();
-    private final String firstPrefix; // e.g. "  - "
-    private final String subPrefix; // e.g. "    "
+    private final String firstPrefix;
+    private final String subPrefix;
     private boolean isFirstLine = true;
 
     ListItemBuffer(String indentStr, String bullet) {
