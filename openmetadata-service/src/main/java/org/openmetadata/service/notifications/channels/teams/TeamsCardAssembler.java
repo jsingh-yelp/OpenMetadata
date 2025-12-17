@@ -44,7 +44,6 @@ final class TeamsCardAssembler extends AbstractVisitor {
   // State tracking
   private boolean inList = false;
 
-  // Add this method to the end of the TeamsCardAssembler class
   List<TeamsMessage.BodyItem> getBodyItems() {
     return new ArrayList<>(body);
   }
@@ -181,7 +180,7 @@ final class TeamsCardAssembler extends AbstractVisitor {
     int before = currentText.length();
     visitChildren(link);
     String label = currentText.substring(before).trim();
-    currentText.setLength(before); // Reset to capture label cleanly
+    currentText.setLength(before);
 
     String url = link.getDestination();
     if (!isAllowedLinkUrl(url)) {
@@ -204,25 +203,21 @@ final class TeamsCardAssembler extends AbstractVisitor {
     for (Node node = list.getFirstChild(); node != null; node = node.getNext()) {
       if (!(node instanceof ListItem li)) continue;
 
-      // 1. Separate Table from Text in this List Item
       TableBlock table = findChild(li, TableBlock.class).orElse(null);
       String itemText = renderListItemText(li);
 
-      // 2. Render Text Part
       if (!itemText.isEmpty()) {
         String bullet = (startNum == null) ? "- " : index + ". ";
         flushLine(padding + bullet + itemText);
       }
 
-      // 3. Render Table Part (if exists)
       if (table != null) {
-        flushCurrentText(); // Ensure text is out before table
+        flushCurrentText();
         processTable(table);
       }
 
       if (startNum != null) index++;
 
-      // 4. Handle Nested Lists
       for (Node child = li.getFirstChild(); child != null; child = child.getNext()) {
         if (child instanceof BulletList bl) processList(bl, indent + 1, null);
         else if (child instanceof OrderedList ol)
@@ -241,7 +236,6 @@ final class TeamsCardAssembler extends AbstractVisitor {
 
     int totalRecords = data.rows.size();
 
-    // Header Summary
     if (totalRecords > 1) {
       body.add(
           TeamsMessage.TextBlock.builder()
@@ -253,7 +247,6 @@ final class TeamsCardAssembler extends AbstractVisitor {
               .build());
     }
 
-    // Render Rows (Transposed for Mobile/Card View)
     for (int i = 0; i < totalRecords; i++) {
       boolean showHeader = totalRecords > 1;
       boolean addSpacing = i > 0 || !showHeader;
@@ -262,18 +255,32 @@ final class TeamsCardAssembler extends AbstractVisitor {
     }
   }
 
+  /**
+   * REFACTORED: Wraps code in an 'emphasis' container to provide a background color box.
+   */
   private void addCodeBlock(String literal) {
     flushCurrentText();
-    if (literal != null && !literal.isEmpty()) {
-      body.add(
-          TeamsMessage.TextBlock.builder()
-              .type("TextBlock")
-              .text(truncate(literal))
-              .wrap(true)
-              .fontType("Monospace")
-              .separator(true)
-              .build());
-    }
+    if (literal == null || literal.isEmpty()) return;
+
+    // 1. Create the TextBlock with Monospace font
+    TeamsMessage.TextBlock codeText =
+        TeamsMessage.TextBlock.builder()
+            .type("TextBlock")
+            .text(truncate(literal))
+            .wrap(true)
+            .fontType("Monospace")
+            .size("Small") // Code often looks better slightly smaller
+            .build();
+
+    // 2. Wrap it in a Container with 'emphasis' style (Grey background in Teams)
+    TeamsMessage.Container container =
+        TeamsMessage.Container.builder()
+            .type("Container")
+            .style("emphasis")
+            .items(List.of(codeText))
+            .build();
+
+    body.add(container);
   }
 
   // --- Helpers: Table Construction ---
@@ -337,11 +344,9 @@ final class TeamsCardAssembler extends AbstractVisitor {
 
     if (headers.isEmpty() && rows.isEmpty()) return new TableData(List.of(), List.of());
 
-    // Normalize headers
     int maxCols = rows.stream().mapToInt(List::size).max().orElse(headers.size());
 
     if (headers.isEmpty()) {
-      // FIX: Add to the existing list instead of reassigning the variable
       IntStream.range(0, maxCols).mapToObj(i -> "Column " + (i + 1)).forEach(headers::add);
     }
 
@@ -414,11 +419,9 @@ final class TeamsCardAssembler extends AbstractVisitor {
     return sb.toString();
   }
 
-  // Renders a node to plain string (using inline formatter or specialized logic)
   private String renderNodeToText(Node node) {
     if (node instanceof FencedCodeBlock f) return truncate(f.getLiteral());
     if (node instanceof IndentedCodeBlock i) return truncate(i.getLiteral());
-    // Recursively using inline formatter for standard nodes
     return INLINE_FORMATTER.renderInlineChildren(node).trim();
   }
 
