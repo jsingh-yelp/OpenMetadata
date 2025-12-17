@@ -338,18 +338,13 @@ final class TeamsCardAssembler extends AbstractVisitor {
       List<String> headers, List<List<String>> rows, int colCount, boolean nested) {
     StringBuilder text = new StringBuilder();
 
-    // Calculate max key length for alignment
-    int maxKeyLength = headers.stream().mapToInt(String::length).max().orElse(0);
-
     for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
       List<String> row = rows.get(rowIdx);
 
-      // Record header with visual separator
-      // Use double newlines for proper line breaks in Teams Adaptive Cards
+      // Record header
       text.append("📋 **Record ").append(rowIdx + 1).append("**\n\n");
-      text.append("─".repeat(Math.min(40, maxKeyLength + 20))).append("\n\n");
 
-      // Key-value pairs
+      // Key-value pairs using bold keys (no space alignment - works without monospace)
       for (int i = 0; i < colCount; i++) {
         String key = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
         String value = i < row.size() && row.get(i) != null ? row.get(i) : "";
@@ -359,12 +354,12 @@ final class TeamsCardAssembler extends AbstractVisitor {
           value = value.substring(0, 57) + "…";
         }
 
-        text.append(String.format("%-" + maxKeyLength + "s : %s", key, value)).append("\n\n");
+        text.append("**").append(key).append(":** ").append(value).append("\n\n");
       }
 
       // Separator between records
       if (rowIdx < rows.size() - 1) {
-        text.append("\n");
+        text.append("───\n\n");
       }
     }
 
