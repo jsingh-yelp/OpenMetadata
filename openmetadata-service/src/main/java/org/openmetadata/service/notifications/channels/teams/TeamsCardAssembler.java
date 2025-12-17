@@ -312,26 +312,32 @@ final class TeamsCardAssembler extends AbstractVisitor {
       }
     }
 
-    // Add summary header
     int totalRecords = bodyRows.size();
-    String summary = String.format("📋 %d record%s", totalRecords, totalRecords == 1 ? "" : "s");
 
-    body.add(
-        TeamsMessage.TextBlock.builder()
-            .type("TextBlock")
-            .text(summary)
-            .wrap(true)
-            .weight("Bolder")
-            .build());
+    // Only show summary header when there are multiple records
+    if (totalRecords > 1) {
+      body.add(
+          TeamsMessage.TextBlock.builder()
+              .type("TextBlock")
+              .text(String.format("📋 %d records", totalRecords))
+              .wrap(true)
+              .weight("Bolder")
+              .spacing("Medium")
+              .build());
+    }
 
     // Add each record as a transposed table
     for (int i = 0; i < bodyRows.size(); i++) {
-      body.add(buildRecordTable(headers, bodyRows.get(i), i + 1, i > 0));
+      body.add(buildRecordTable(headers, bodyRows.get(i), i + 1, totalRecords > 1, i > 0));
     }
   }
 
   private TeamsMessage.Table buildRecordTable(
-      List<String> headers, List<String> record, int recordNumber, boolean addSpacing) {
+      List<String> headers,
+      List<String> record,
+      int recordNumber,
+      boolean showRecordNumber,
+      boolean addSpacing) {
     List<TeamsMessage.TableColumnDefinition> columns =
         List.of(
             TeamsMessage.TableColumnDefinition.builder().width("auto").build(),
@@ -339,13 +345,16 @@ final class TeamsCardAssembler extends AbstractVisitor {
 
     List<TeamsMessage.TableRow> tableRows = new ArrayList<>();
 
-    // Header row with record number
-    tableRows.add(
-        TeamsMessage.TableRow.builder()
-            .type("TableRow")
-            .cells(
-                List.of(buildTableCell("Record " + recordNumber, true), buildTableCell("", false)))
-            .build());
+    // Only show header row with record number when there are multiple records
+    if (showRecordNumber) {
+      tableRows.add(
+          TeamsMessage.TableRow.builder()
+              .type("TableRow")
+              .cells(
+                  List.of(
+                      buildTableCell("📋 Record " + recordNumber, true), buildTableCell("", false)))
+              .build());
+    }
 
     // Key-value rows
     for (int i = 0; i < headers.size(); i++) {
@@ -368,11 +377,14 @@ final class TeamsCardAssembler extends AbstractVisitor {
         TeamsMessage.Table.builder()
             .type("Table")
             .gridStyle("accent")
-            .firstRowAsHeader(true)
+            .firstRowAsHeader(showRecordNumber)
             .columns(columns)
             .rows(tableRows);
 
     if (addSpacing) {
+      tableBuilder.spacing("Medium");
+    } else {
+      // Add spacing before first table for visual separation from list
       tableBuilder.spacing("Medium");
     }
 
@@ -761,21 +773,23 @@ final class TeamsCardAssembler extends AbstractVisitor {
       }
     }
 
-    // Add summary header
     int totalRecords = bodyRows.size();
-    String summary = String.format("📋 %d record%s", totalRecords, totalRecords == 1 ? "" : "s");
 
-    body.add(
-        TeamsMessage.TextBlock.builder()
-            .type("TextBlock")
-            .text(summary)
-            .wrap(true)
-            .weight("Bolder")
-            .build());
+    // Only show summary header when there are multiple records
+    if (totalRecords > 1) {
+      body.add(
+          TeamsMessage.TextBlock.builder()
+              .type("TextBlock")
+              .text(String.format("📋 %d records", totalRecords))
+              .wrap(true)
+              .weight("Bolder")
+              .spacing("Medium")
+              .build());
+    }
 
     // Add each record as a transposed table
     for (int i = 0; i < bodyRows.size(); i++) {
-      body.add(buildRecordTable(headers, bodyRows.get(i), i + 1, i > 0));
+      body.add(buildRecordTable(headers, bodyRows.get(i), i + 1, totalRecords > 1, i > 0));
     }
   }
 
