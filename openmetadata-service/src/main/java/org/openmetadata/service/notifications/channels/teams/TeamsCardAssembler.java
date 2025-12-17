@@ -322,61 +322,85 @@ final class TeamsCardAssembler extends AbstractVisitor {
       }
     }
 
-    String tableText = formatTableAsText(headers, bodyRows, colCount, false);
-    if (!tableText.isEmpty()) {
-      body.add(
-          TeamsMessage.TextBlock.builder()
-              .type("TextBlock")
-              .text(tableText)
-              .wrap(true)
-              .fontType("Monospace")
-              .build());
+    // Add summary header
+    int totalRecords = bodyRows.size();
+    String summary = String.format("📋 %d record%s", totalRecords, totalRecords == 1 ? "" : "s");
+
+    body.add(
+        TeamsMessage.TextBlock.builder()
+            .type("TextBlock")
+            .text(summary)
+            .wrap(true)
+            .weight("Bolder")
+            .build());
+
+    // Add each record as a transposed table
+    for (int i = 0; i < bodyRows.size(); i++) {
+      body.add(buildRecordTable(headers, bodyRows.get(i), i + 1, i > 0));
     }
   }
 
-  private String formatTableAsText(
-      List<String> headers, List<List<String>> rows, int colCount, boolean nested) {
-    StringBuilder text = new StringBuilder();
+  private TeamsMessage.Table buildRecordTable(
+      List<String> headers, List<String> record, int recordNumber, boolean addSpacing) {
+    List<TeamsMessage.TableColumnDefinition> columns =
+        List.of(
+            TeamsMessage.TableColumnDefinition.builder().width("auto").build(),
+            TeamsMessage.TableColumnDefinition.builder().width("stretch").build());
 
-    // Calculate max key length for alignment (monospace font will be used)
-    int maxKeyLength = headers.stream().mapToInt(String::length).max().orElse(0);
+    List<TeamsMessage.TableRow> tableRows = new ArrayList<>();
 
-    // When nested (inside a list), use markdown code fence for proper code block styling
-    if (nested) {
-      text.append("\n```\n");
-    }
+    // Header row with record number
+    tableRows.add(
+        TeamsMessage.TableRow.builder()
+            .type("TableRow")
+            .cells(
+                List.of(buildTableCell("Record " + recordNumber, true), buildTableCell("", false)))
+            .build());
 
-    for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
-      List<String> row = rows.get(rowIdx);
+    // Key-value rows
+    for (int i = 0; i < headers.size(); i++) {
+      String field = headers.get(i);
+      String value = i < record.size() && record.get(i) != null ? record.get(i) : "";
 
-      // Record header with separator line
-      text.append("📋 Record ").append(rowIdx + 1).append("\n");
-      text.append("─".repeat(Math.min(40, maxKeyLength + 20))).append("\n");
-
-      // Key-value pairs with space alignment (works with monospace)
-      for (int i = 0; i < colCount; i++) {
-        String key = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
-        String value = i < row.size() && row.get(i) != null ? row.get(i) : "";
-
-        // Truncate long values
-        if (value.length() > 60) {
-          value = value.substring(0, 57) + "…";
-        }
-
-        text.append(String.format("%-" + maxKeyLength + "s : %s", key, value)).append("\n");
+      // Truncate long values
+      if (value.length() > 60) {
+        value = value.substring(0, 57) + "…";
       }
 
-      // Separator between records
-      if (rowIdx < rows.size() - 1) {
-        text.append("\n");
-      }
+      tableRows.add(
+          TeamsMessage.TableRow.builder()
+              .type("TableRow")
+              .cells(List.of(buildTableCell(field, true), buildTableCell(value, false)))
+              .build());
     }
 
-    if (nested) {
-      text.append("```");
+    TeamsMessage.Table.TableBuilder tableBuilder =
+        TeamsMessage.Table.builder()
+            .type("Table")
+            .gridStyle("accent")
+            .firstRowAsHeader(true)
+            .columns(columns)
+            .rows(tableRows);
+
+    if (addSpacing) {
+      tableBuilder.spacing("Medium");
     }
 
-    return text.toString();
+    return tableBuilder.build();
+  }
+
+  private TeamsMessage.TableCell buildTableCell(String text, boolean bold) {
+    TeamsMessage.TextBlock.TextBlockBuilder textBuilder =
+        TeamsMessage.TextBlock.builder().type("TextBlock").text(text).wrap(true);
+
+    if (bold) {
+      textBuilder.weight("Bolder");
+    }
+
+    return TeamsMessage.TableCell.builder()
+        .type("TableCell")
+        .items(List.of(textBuilder.build()))
+        .build();
   }
 
   private String formatTableForList(TableBlock table) {
@@ -414,7 +438,47 @@ final class TeamsCardAssembler extends AbstractVisitor {
       }
     }
 
-    return formatTableAsText(headers, bodyRows, colCount, true);
+    return formatTableAsText(headers, bodyRows, colCount);
+  }
+
+  private String formatTableAsText(List<String> headers, List<List<String>> rows, int colCount) {
+    StringBuilder text = new StringBuilder();
+
+    // Calculate max key length for alignment (monospace font will be used)
+    int maxKeyLength = headers.stream().mapToInt(String::length).max().orElse(0);
+
+    // Use markdown code fence for proper code block styling inside lists
+    text.append("\n```\n");
+
+    for (int rowIdx = 0; rowIdx < rows.size(); rowIdx++) {
+      List<String> row = rows.get(rowIdx);
+
+      // Record header with separator line
+      text.append("📋 Record ").append(rowIdx + 1).append("\n");
+      text.append("-".repeat(Math.min(40, maxKeyLength + 20))).append("\n");
+
+      // Key-value pairs with space alignment (works with monospace)
+      for (int i = 0; i < colCount; i++) {
+        String key = i < headers.size() ? headers.get(i) : "Column " + (i + 1);
+        String value = i < row.size() && row.get(i) != null ? row.get(i) : "";
+
+        // Truncate long values
+        if (value.length() > 60) {
+          value = value.substring(0, 57) + "…";
+        }
+
+        text.append(String.format("%-" + maxKeyLength + "s : %s", key, value)).append("\n");
+      }
+
+      // Separator between records
+      if (rowIdx < rows.size() - 1) {
+        text.append("\n");
+      }
+    }
+
+    text.append("```");
+
+    return text.toString();
   }
 
   private List<String> extractTableRowCells(TableRow row) {
