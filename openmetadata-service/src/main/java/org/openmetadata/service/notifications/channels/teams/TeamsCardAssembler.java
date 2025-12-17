@@ -203,26 +203,39 @@ final class TeamsCardAssembler extends AbstractVisitor {
     for (Node node = list.getFirstChild(); node != null; node = node.getNext()) {
       if (!(node instanceof ListItem li)) continue;
 
-      TableBlock table = findChild(li, TableBlock.class).orElse(null);
-      String itemText = renderListItemText(li);
-
-      if (!itemText.isEmpty()) {
-        String bullet = (startNum == null) ? "- " : index + ". ";
-        flushLine(padding + bullet + itemText);
-      }
-
-      if (table != null) {
-        flushCurrentText();
-        processTable(table);
-      }
-
-      if (startNum != null) index++;
+      String bullet = (startNum == null) ? "- " : index++ + ". ";
+      ListItemBuffer itemBuffer = new ListItemBuffer(padding, bullet);
 
       for (Node child = li.getFirstChild(); child != null; child = child.getNext()) {
-        if (child instanceof BulletList bl) processList(bl, indent + 1, null);
-        else if (child instanceof OrderedList ol)
-          processList(ol, indent + 1, ol.getMarkerStartNumber());
+        switch (child) {
+          case FencedCodeBlock c -> {
+            itemBuffer.flush();
+            addCodeBlock(c.getLiteral());
+          }
+          case IndentedCodeBlock c -> {
+            itemBuffer.flush();
+            addCodeBlock(c.getLiteral());
+          }
+          case TableBlock c -> {
+            itemBuffer.flush();
+            processTable(c);
+          }
+          case BlockQuote c -> {
+            itemBuffer.flush();
+            visit(c);
+          }
+          case BulletList c -> {
+            itemBuffer.flush();
+            processList(c, indent + 1, null);
+          }
+          case OrderedList c -> {
+            itemBuffer.flush();
+            processList(c, indent + 1, c.getMarkerStartNumber());
+          }
+          default -> itemBuffer.append(renderNodeToText(child));
+        }
       }
+      itemBuffer.flush(); // Flush remaining text for this list item
     }
 
     flushCurrentText();
@@ -255,24 +268,19 @@ final class TeamsCardAssembler extends AbstractVisitor {
     }
   }
 
-  /**
-   * REFACTORED: Wraps code in an 'emphasis' container to provide a background color box.
-   */
   private void addCodeBlock(String literal) {
     flushCurrentText();
     if (literal == null || literal.isEmpty()) return;
 
-    // 1. Create the TextBlock with Monospace font
     TeamsMessage.TextBlock codeText =
         TeamsMessage.TextBlock.builder()
             .type("TextBlock")
             .text(truncate(literal))
             .wrap(true)
             .fontType("Monospace")
-            .size("Small") // Code often looks better slightly smaller
+            .size("Small")
             .build();
 
-    // 2. Wrap it in a Container with 'emphasis' style (Grey background in Teams)
     TeamsMessage.Container container =
         TeamsMessage.Container.builder()
             .type("Container")
@@ -369,9 +377,11 @@ final class TeamsCardAssembler extends AbstractVisitor {
     if (currentText.isEmpty()) return;
     String text = currentText.toString().trim();
     if (!text.isEmpty()) {
-      for (String line : text.split("\\n+")) {
-        if (!line.trim().isEmpty()) body.add(createTextBlock(line.trim(), null, 0));
-      }
+      // Split clean lines and add them as individual blocks
+      text.lines()
+          .map(String::trim)
+          .filter(s -> !s.isEmpty())
+          .forEach(line -> body.add(createTextBlock(line, null, 0)));
     }
     currentText.setLength(0);
   }
@@ -401,22 +411,6 @@ final class TeamsCardAssembler extends AbstractVisitor {
     currentText.append(wrapper);
     visitChildren(node);
     currentText.append(wrapper);
-  }
-
-  private String renderListItemText(ListItem li) {
-    StringBuilder sb = new StringBuilder();
-    boolean first = true;
-    for (Node c = li.getFirstChild(); c != null; c = c.getNext()) {
-      if (c instanceof TableBlock || c instanceof BulletList || c instanceof OrderedList) continue;
-
-      String text = renderNodeToText(c);
-      if (text.isEmpty()) continue;
-
-      if (!first) sb.append(" ");
-      sb.append(text);
-      first = false;
-    }
-    return sb.toString();
   }
 
   private String renderNodeToText(Node node) {
@@ -467,6 +461,40 @@ final class TeamsCardAssembler extends AbstractVisitor {
   private record TableData(List<String> headers, List<List<String>> rows) {
     boolean isEmpty() {
       return headers.isEmpty() && rows.isEmpty();
+    }
+  }
+
+  /** Helper to manage list item text buffer and bullet rendering state. */
+  private class ListItemBuffer {
+    private final StringBuilder buffer = new StringBuilder();
+    private final String firstPrefix; // e.g. "  - "
+    private final String subPrefix; // e.g. "    "
+    private boolean isFirstLine = true;
+
+    ListItemBuffer(String indentStr, String bullet) {
+      this.firstPrefix = indentStr + bullet;
+      this.subPrefix = indentStr + "  ";
+    }
+
+    void append(String text) {
+      if (!text.isBlank()) {
+        if (!buffer.isEmpty()) buffer.append('\n');
+        buffer.append(text);
+      }
+    }
+
+    void flush() {
+      if (!buffer.isEmpty()) {
+        String prefix = isFirstLine ? firstPrefix : subPrefix;
+        body.add(createTextBlock(prefix + buffer, null, 0));
+        buffer.setLength(0);
+        isFirstLine = false;
+      } else if (isFirstLine) {
+        // Edge case: List item starts immediately with a block (no text).
+        // Render the bullet as a standalone line so it isn't lost.
+        body.add(createTextBlock(firstPrefix.trim(), null, 0));
+        isFirstLine = false;
+      }
     }
   }
 }
